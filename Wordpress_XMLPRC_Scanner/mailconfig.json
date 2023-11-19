@@ -1,0 +1,7 @@
+{
+    "receiver": "RECEIVER HERE",
+    "sender": "YOUR GMAIL ADERESS HERE",
+    "password": "YOUR APP PASSWORD HERE -> https://myaccount.google.com/apppasswords",
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587
+}
