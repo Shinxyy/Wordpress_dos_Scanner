@@ -10,8 +10,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 import smtplib
 from email.mime.text import MIMEText
-
-
+import json
+import time
 #? Write a function which is able to send an email to a specific email address with the data of the scan
 
 
@@ -56,15 +56,20 @@ def collect_wordpress_info(domain: str) -> str:
     # TODO: Add username enumeration check
 
 # Send findings for each domain to the an email address and create a report
-def send_email(subject: str, body: str, to: str, sender: str, password: str, smtp_server: str, smtp_port: int):
+def send_email(subject: str, body: str):
+    
+    # parse data from the mailconfig.json file into the correct variables
+    with open("./mailconfig.json", 'r') as file:
+        mailconfig = json.load(file)
+    
     msg = MIMEText(body)
     msg['Subject'] = subject
-    msg['From'] = sender
-    msg['To'] = to
-
-    server = smtplib.SMTP(smtp_server, smtp_port)
+    msg['From'] = mailconfig['sender']
+    msg['To'] = mailconfig['receiver']
+    
+    server = smtplib.SMTP(mailconfig['smtp_server'], mailconfig['smtp_port'])
     server.starttls()
-    server.login(sender, password)
+    server.login(mailconfig['sender'], mailconfig['password'])
     server.send_message(msg)
     server.quit()
 
@@ -94,19 +99,14 @@ def send_findings_to_email(all_findings: dict):
 If vulnerabilities are found, please fix them in order to prevent further botnet involvement.
     """   
     print(findings_str)
-    exit()
+    print_finding("Debug", "Sending report to the specified mail adres", "info", "Data processing", "Wordpress")
+
     # Send the email
+    timestr = time.strftime("%Y%m%d-%H%M%S")
     send_email(
-        subject='Scan Findings',
-        body=findings_str,
-        to='recipient@example.com',
-        sender='your-email@example.com',
-        password='your-email-password',
-        smtp_server='smtp.example.com',
-        smtp_port=587
+        subject=f'Scan Findings - Wordpress Dos/DDos scan at {timestr}',
+        body=findings_str
     )
-
-
 
 def scan_domain(domain: str, webhook_url: str, all_data: dict) -> dict:
     def add_finding(vulnerability: str, severity: str, confidence: str) -> None:
