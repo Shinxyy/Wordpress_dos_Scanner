@@ -1,4 +1,4 @@
-# Project Title
+# Wordpress pingback/Dos scanner
 
 The scanner checks wordpress websites and test them out on a few dos/pingback tecniques frequently used in wordpress.
 
