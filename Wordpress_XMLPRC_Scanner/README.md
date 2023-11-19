@@ -2,6 +2,12 @@
 
 The scanner checks wordpress websites and test them out on a few dos/pingback tecniques frequently used in wordpress.
 
+## Dont have poetry installed?
+You could easily install poetry with:
+```sh
+pip install poetry
+```
+
 ## Installation
 
 Instructions on how to install the project:
