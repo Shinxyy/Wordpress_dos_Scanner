@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "xmlrpc_Scanner"
+version = "0.1.0"
+description = ""
+authors = ["Patrick Kuin"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "^2.31.0"
+colorama = "^0.4.6"
+pyfiglet = "^1.0.2"
+emoji = "^2.8.0"
+termcolor = "^2.3.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
