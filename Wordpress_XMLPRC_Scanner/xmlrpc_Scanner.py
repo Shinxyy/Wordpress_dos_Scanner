@@ -42,17 +42,34 @@ def collect_wordpress_info(domain: str) -> str:
         exit()
     
     # Try to get the wordpress version
+    version_found = False
     response = requests.get(f"{domain}/feed")
-    if "?v=" in response.text:
-        xml_data = response.text
-        root = ET.fromstring(xml_data)
-        # Find the generator element
-        generator = root.find('.//generator')
-        # Extract the version number
-        version_number = generator.text.split("?v=")[-1]
-        print_finding("info", f"Wordpress version: {version_number}", "low", "Scanning", "Wordpress", confidence="99")
-        return version_number
-
+    if response.status_code == 200:
+        if "?v=" in response.text:
+            xml_data = response.text
+            root = ET.fromstring(xml_data)
+            # Find the generator element
+            generator = root.find('.//generator')
+            # Extract the version number
+            version_number = generator.text.split("?v=")[-1]
+            print_finding("info", f"Wordpress version: {version_number}", "low", "Scanning", "Wordpress", confidence="99")
+            wordpress_found = True
+    if not version_found:
+        response = requests.get(f"{domain}")
+        if '<meta name="generator" content=' in response.text:
+            #print(response.text)
+            # Search inside the response.text for the generator meta tag
+            generator_tag = response.text.split('<meta name="generator" content=')[-1]
+            wordpress_version = generator_tag[:20].lstrip('"')
+            # The output of wordpress_version needs to be 4.9.7 so we need to strip the rest of the string and remove the " at the end
+            wordpress_version = wordpress_version.split('"')[0]
+            wordpress_version = wordpress_version.split()[1]
+            print_finding("info", f"Wordpress version: {wordpress_version}", "low", "Scanning", "Wordpress", confidence="99")
+            wordpress_found = True
+    if wordpress_found:
+        return wordpress_version
+    else:
+        return "Not found"
     # TODO: Add username enumeration check
 
 # Send findings for each domain to the an email address and create a report
@@ -61,6 +78,8 @@ def send_email(subject: str, body: str):
     # parse data from the mailconfig.json file into the correct variables
     with open("./mailconfig.json", 'r') as file:
         mailconfig = json.load(file)
+    
+    print_finding("Debug", f"Sending report to : {mailconfig['receiver']}", "info", "Data processing", "Wordpress")
     
     msg = MIMEText(body)
     msg['Subject'] = subject
@@ -75,31 +94,35 @@ def send_email(subject: str, body: str):
 
 def send_findings_to_email(all_findings: dict):
     # Format the alldata into a nice report where the findings are grouped per domain and the wordpress version is also included
-    # and if the findings are empty, than set the value no findings like this Finding: No findings
-    findings_str = "These are the findings of wordpress Dos/DDos site the scans:\n\n"
-    findings_str += "-------------------------\n"
+    # and if the findings are empty, than set the value no findings like this Finding: No findings. Inside the data field there can be multiple vulnebilties sort them nicely out 
+    # and display them on a correct way so we can read them easily, which vulnerability, what is the severity, what is the confidence and what is the solution
+    vuln_counter = 0
+    findings_str = ""
+    findings_str += "Report of the wordpress Dos/DDos scan\n"
+    findings_str += "--------------------------\n"
     for domain, findings in all_findings.items():
         findings_str += f"Domain: {domain}\n"
-        findings_str += f"Wordpress version: {findings['wordpress_version']}\n"
+        findings_str += f"Wordpress version: {findings['wordpress_version']}\n\n"
+        findings_str += "Findings:\n"
+        findings_str += "--------------------------\n"
         if findings['wordpress_findings']['vulnerability'] == "":
-            findings_str += f"Findings: No findings\n"
-            findings_str += "-------------------------\n"
-            continue
+            findings_str += "No findings\n"
         else:
-            findings_str += f"Findings:\n"
-        
-        for finding, data in findings['wordpress_findings'].items():
-            if data == "":
-                data = "No findings"
-            findings_str += f"\t{finding}: {data}\n"
-        findings_str += "-------------------------\n"
-    findings_str += """
-\nIf none of the websites contain a vulnerability, then the websites are safe against the most common DDoS/DoS techniques used in WordPress.
-
-If vulnerabilities are found, please fix them in order to prevent further botnet involvement.
-    """   
-    print(findings_str)
-    print_finding("Debug", "Sending report to the specified mail adres", "info", "Data processing", "Wordpress")
+            # Split the findings on the new line and loop over them
+            
+            for vulnerability, severity, confidence, solution in zip(findings['wordpress_findings']['vulnerability'].split('\n'), findings['wordpress_findings']['severity'].split('\n'), findings['wordpress_findings']['confidence'].split('\n'), findings['wordpress_findings']['solution'].split('\n')):
+                if vulnerability != "":
+                    findings_str += f"Vulnerability: {vulnerability}\n"
+                    findings_str += f"Severity: {severity}\n"
+                    findings_str += f"Confidence: {confidence}\n"
+                    findings_str += f"Solution: {solution}\n"
+                    findings_str += "--------------------------\n"
+                    vuln_counter += 1
+        findings_str += "\n"
+    if vuln_counter > 1:
+        findings_str += f"Total vulnerabilities found: {vuln_counter}, which indicates a botnet"
+    
+    #print(findings_str)
 
     # Send the email
     timestr = time.strftime("%Y%m%d-%H%M%S")
@@ -109,10 +132,24 @@ If vulnerabilities are found, please fix them in order to prevent further botnet
     )
 
 def scan_domain(domain: str, webhook_url: str, all_data: dict) -> dict:
-    def add_finding(vulnerability: str, severity: str, confidence: str) -> None:
-        domain_findings[f"{domain}"]["wordpress_findings"]["vulnerability"] = vulnerability
-        domain_findings[f"{domain}"]["wordpress_findings"]["severity"] = severity
-        domain_findings[f"{domain}"]["wordpress_findings"]["confidence"] = confidence
+    def add_finding(vulnerability: str, severity: str, confidence: str, solution: str) -> None:
+        # appende the data to the domain_findings dict and there can be multiple findings per domain, so we dont want to overwrite the data but append in a list
+        domain_findings[f"{domain}"]['wordpress_findings']['vulnerability'] += f"\n{vulnerability}"
+        domain_findings[f"{domain}"]['wordpress_findings']['severity'] += f"\n{severity}"
+        domain_findings[f"{domain}"]['wordpress_findings']['confidence'] += f"\n{confidence}"
+        domain_findings[f"{domain}"]['wordpress_findings']['solution'] += f"\n{solution}"
+        
+        
+        
+        
+        
+
+
+                
+
+
+
+        
     
     wordpress_version = collect_wordpress_info(domain)
     print_finding("Debug", "Starting DDOS/DOS detection", "info", "Scanning", "Wordpress")
@@ -122,15 +159,13 @@ def scan_domain(domain: str, webhook_url: str, all_data: dict) -> dict:
             "wordpress_findings": {
                 "vulnerability": "",
                 "severity": "",
-                "confidence": ""
+                "confidence": "",
+                "solution": ""
             },
             "wordpress_version": wordpress_version          
         }
     }
-    # This function takes 3 parameters, the vulerability, the severity and the confidence level and will add the data to the domain_findings data
-    
-    
-    
+     
 
     #? DDOS CVEs checks depending on wordpress Core version
     if wordpress_version != "":
@@ -143,7 +178,7 @@ def scan_domain(domain: str, webhook_url: str, all_data: dict) -> dict:
             response = requests.get(url)
             if response.status_code == 200:
                 # Store the data into the add_finding function
-                add_finding("CVE-2018-6389", "high", "70")
+                add_finding("CVE-2018-6389", "high", "70", "Update wordpress to the latest version")
                 print_finding("info", f"Vulnerable to CVE-2018-6389", "high", "Scanning", "Wordpress", confidence="70")
 
     #? 4. Check if XMLRPC is enabled
@@ -166,7 +201,7 @@ def scan_domain(domain: str, webhook_url: str, all_data: dict) -> dict:
         response = requests.post(xmlrpc_url, data=xml_data, headers=headers)
         if response.status_code == 200:
             # Store the data into the domain_findings data and also append the severity level which is high in this case
-            add_finding("XMLRPC pingback, check webhook for request", "medium", "50")
+            add_finding("XMLRPC pingback, check webhook for request", "medium", "50", "Disable XMLRPC pingback, see: https://wordpress.org/plugins/remove-xmlrpc-pingback-ping/")
             print_finding("info", f"XMLRPC pingback, check webhook for request", "medium", "Scanning", "Wordpress", confidence="50")
     
     #? 2. Check against /wp-json/oembed/1.0/proxy - SSRF (/wp-json/oembed/1.0/proxy?url=target.site)
@@ -174,7 +209,7 @@ def scan_domain(domain: str, webhook_url: str, all_data: dict) -> dict:
     response = requests.get(f"{domain}/wp-json/oembed/1.0/proxy?url={webhook_stripped}")
     if response.status_code == 200:
         # store the dat into the add_finding function
-        add_finding("SSRF and DOS vulebrability found in /wp-json/oembed/1.0/proxy?url=", "high", "75")
+        add_finding("/wp-json/oembed/1.0/proxy - SSRF/Dos", "high", "75", "disble the REST API, see: https://secure.wphackedhelp.com/blog/wordpress-rest-api-vulnerability-content-injection/")
         print_finding("info", f"SSRF and DOS vulebrability found in /wp-json/oembed/1.0/proxy?url=", "high", "Scanning", "Wordpress", confidence="75")
 
     print_finding("debug", "Scanning complete", "info", "Scanning", "Completed")
